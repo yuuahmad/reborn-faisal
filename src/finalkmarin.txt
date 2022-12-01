@@ -1,0 +1,221 @@
+#include <Arduino.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+// include board
+#if defined(ESP32)
+#include <WiFi.h>
+#elif defined(ESP8266)
+#include <ESP8266WiFi.h>
+#endif
+#include <ACS712.h>
+
+// include firebase dan wifi
+#include <Firebase_ESP_Client.h>
+#include <addons/TokenHelper.h>
+#include <addons/RTDBHelper.h>
+#define WIFI_SSID "KONTRAKAN UYE" // ini adalah nama wifi
+#define WIFI_PASSWORD "KUSANG123"   // dan ini adalah passwordnya. kosongkan bagian ini kalau tidak pakai password
+#define API_KEY "AIzaSyBsVj4YXqGT7PexdZ0QD1wK2UUjRtPk878"
+#define DATABASE_URL "bangfaisal-1-default-rtdb.asia-southeast1.firebasedatabase.app" //<databaseName>.firebaseio.com or <databaseName>.<region>.firebasedatabase.app
+#define USER_EMAIL "ahmadyusufmaulana0@gmail.com"
+#define USER_PASSWORD "yusuf1112"
+
+// kode untuk sensor arus
+ACS712 sensor_arus_baterai(ACS712_20A, 33);
+ACS712 sensor_arus_generator(ACS712_05B, 32);
+
+// Define Firebase Data object
+FirebaseData fbdo;
+FirebaseAuth auth;
+FirebaseConfig config;
+unsigned long sendDataPrevMillis = 0;
+
+// ini adalah setiing lcd
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// ini adalah setting untuk voltage sensor
+// nilai maksimal untuk voltage sensor adalah 25 volt
+// voltage sensor bekerja dengan cara yang sama dengan voltage divider
+const int voltageSensorBaterai = 35;
+float vOUT1 = 0.0;
+float vIN1 = 0.0;
+float R1 = 30000.0;
+float R2 = 7500.0;
+int valuevoltage = 0;
+
+// settingan voltage sensor kedua
+const int voltageSensorGenerator = 34;
+float vOUT2 = 0.0;
+float vIN2 = 0.0;
+int valuevoltage2 = 0;
+
+// settingan relay
+const int relay1 = 4;
+const int relay2 = 5;
+
+// boolean untuk relay
+bool keadaanRelay1 = false;
+bool keadaanRelay2 = false;
+
+// ini adalah variabel nilai daya
+float daya = 0;
+
+// variabel counter dengan menggunakan ir sensor
+const int sensorIR = 18;
+int keadaanSensor = 0;
+int keadaanTekan = 0;
+int jumlahTonjolan = 0;  // jumlah polisi tidur tertekan kebawah
+int jumlahKendaraan = 0; // adalah jumlah kendaraan dengan membagi jumlah jonjolan dengan dua
+
+void setup()
+{
+  // mulai komunikasi serial
+  Serial.begin(115200);
+  // ini adalah inisiasi seting untuk lcd
+  lcd.init();
+  lcd.backlight();
+  lcd.setCursor(0, 0);
+  lcd.print("polisi tidur    ");
+  lcd.setCursor(0, 1);
+  lcd.print("generator v1.0  ");
+  delay(1000);
+
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.print("Connecting to Wi-Fi");
+  lcd.setCursor(0, 0);
+  lcd.print("connecting     ");
+  lcd.setCursor(0, 1);
+  lcd.print("               ");
+  delay(3000);
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    Serial.print(".");
+    lcd.setCursor(0, 1);
+    lcd.print(".");
+    delay(3000);
+  }
+  Serial.println();
+  Serial.print("Connected with IP: ");
+  Serial.println(WiFi.localIP());
+  Serial.println();
+  lcd.setCursor(0, 0);
+  lcd.print("connected!?    ");
+  lcd.setCursor(0, 1);
+  lcd.print("IP:");
+  lcd.print(WiFi.localIP());
+  delay(1000);
+
+  // kalibrasi nilai sensor arus
+  Serial.println("Calibrating... Ensure that no current flows through the sensor at this moment");
+  int zero_1 = sensor_arus_generator.calibrate();
+  int zero_2 = sensor_arus_baterai.calibrate();
+  Serial.println("Done!");
+  Serial.println("Zero point for this sensor_arus_generator = " + zero_1);
+  Serial.println("Zero point for this sensor_arus_baterai = " + zero_1);
+
+  Serial.printf("Firebase Client v%s\n\n", FIREBASE_CLIENT_VERSION);
+
+  config.api_key = API_KEY;
+  auth.user.email = USER_EMAIL;
+  auth.user.password = USER_PASSWORD;
+  config.database_url = DATABASE_URL;
+  config.token_status_callback = tokenStatusCallback; // see addons/TokenHelper.h
+  Firebase.begin(&config, &auth);
+  Firebase.reconnectWiFi(true);
+  Firebase.setDoubleDigits(5);
+
+  // setting inisiasi relay
+  pinMode(relay1, OUTPUT);
+  pinMode(relay2, OUTPUT);
+
+  // setting inisialisasi sensor IR
+  pinMode(sensorIR, INPUT);
+}
+
+void loop()
+{
+  // kode untuk menghitung jumlah kendaraan
+  keadaanSensor = digitalRead(sensorIR);
+  if (keadaanSensor == HIGH && keadaanTekan == 0)
+  {
+    jumlahTonjolan++;
+    keadaanTekan = 1;
+  }
+  else if (keadaanSensor == LOW)
+  {
+    keadaanTekan = 0;
+  }
+  // bagi dua nilai jumlah tonjolan sehingga didapatkan nilai jumlah kendaraan :)
+  jumlahKendaraan = jumlahTonjolan / 2;
+
+  // ini adalah kode untuk sensor arus
+  float arus_1 = sensor_arus_generator.getCurrentDC();
+  float arus_2 = sensor_arus_baterai.getCurrentDC();
+  // buat sensor arus selalu menampilkan nilai positiv
+  if (arus_1 < 0)
+    arus_1 = arus_1 * -1;
+  if (arus_2 < 0)
+    arus_2 = arus_2 * -1;
+  // tampilkan nilai arus ke serial dan lcd
+  Serial.println(String("arus 1= ") + arus_1 + " arus 2 = " + arus_2);
+  // kode sensor voltase.
+  //  nilali 4.3 didapatkan dari trial dan error yang saya lakukan.
+  //  harusnya nilai ini menggunakan nilai 5, karena votage refnya memang segitu.
+  //  namun karena masalah resolusi, saya jadikan 4.3
+  valuevoltage = analogRead(voltageSensorGenerator);
+  vOUT1 = (valuevoltage * 3.5) / 4095.0;
+  vIN1 = vOUT1 / (R2 / (R1 + R2));
+  daya = vIN1 * arus_1;
+  lcd.setCursor(0, 0);
+  lcd.print("dya:");
+  lcd.print(daya, 1);
+  lcd.print(" krn:");
+  lcd.print(jumlahKendaraan);
+  lcd.print("   ");
+
+  // kode sensor voltase kedua
+  valuevoltage2 = analogRead(voltageSensorBaterai);
+  vOUT2 = (valuevoltage2 * 3.5) / 4095.0;
+  vIN2 = vOUT2 / (R2 / (R1 + R2));
+  lcd.setCursor(0, 1);
+  lcd.print("tgng bat: ");
+  lcd.print(vIN2, 2);
+  lcd.print("       ");
+
+  if (vIN1 > 32 || arus_1 > 2.8) // nilai voltase dan arus yang aman untuk step down dari generator
+  {
+    digitalWrite(relay1, HIGH);
+    keadaanRelay1 = true;
+  }
+  else
+  {
+    digitalWrite(relay1, LOW);
+    keadaanRelay1 = false;
+  }
+
+  if (vIN2 > 14.3) // ini adalah voltase baterai saat baterai dalam keadaan penuh
+  {
+    digitalWrite(relay2, HIGH);
+    keadaanRelay2 = true;
+  }
+  else
+  {
+    digitalWrite(relay2, LOW);
+    keadaanRelay2 = false;
+  }
+
+  // ini kode untuk upload kode ke firebase
+  if (Firebase.ready() && (millis() - sendDataPrevMillis > 4000 || sendDataPrevMillis == 0))
+  {
+    sendDataPrevMillis = millis();
+    Firebase.RTDB.setFloat(&fbdo, "/DayaGenerator", daya);
+    Firebase.RTDB.setFloat(&fbdo, "/VGenerator", vIN1);
+    Firebase.RTDB.setFloat(&fbdo, "/VBaterai", vIN2);
+    Firebase.RTDB.setFloat(&fbdo, "/Agenerator", arus_1);
+    Firebase.RTDB.setFloat(&fbdo, "/ABaterai", arus_2);
+    Firebase.RTDB.setBool(&fbdo, "/RelayGenerator", keadaanRelay1);
+    Firebase.RTDB.setBool(&fbdo, "/RelayBaterai", keadaanRelay2);
+    Firebase.RTDB.setInt(&fbdo, "/JumlahKendaraan", jumlahKendaraan);
+  }
+}

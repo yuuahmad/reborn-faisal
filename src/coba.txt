@@ -1,0 +1,38 @@
+#include <Arduino.h>
+#include <Wire.h>
+#include <SPIFFS.h>
+#include <SD.h>
+#include <Update.h>
+
+#include <LiquidCrystal_I2C.h>
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <ACS712.h>
+
+LiquidCrystal_I2C lcd(0x27, 16, 2); // buat variabel lcd
+int nilai = 0;                      // buat variabel bernama nilai
+
+void setup()
+{
+    Serial.begin(115200); // mulai komunikasi serial
+    lcd.init();           // inisialisasi lcd
+    lcd.backlight();      // buat backlight pada lcd menyala
+    pinMode(4, OUTPUT);   // pin relay untuk generator
+    pinMode(5, OUTPUT);   // pin relay untuk baterai
+}
+
+void loop()
+{
+    // digitalWrite(4, HIGH);
+    // digitalWrite(5, HIGH);
+    // delay(1000);
+    // digitalWrite(4, LOW);
+    // digitalWrite(5, LOW);
+    // delay(1000);
+    lcd.setCursor(0, 0);
+    lcd.print("Penghitung : ");
+    lcd.setCursor(0, 1);
+    lcd.print(nilai);
+    nilai++; // buat nilai naik satu persatu
+    delay(1000);
+}

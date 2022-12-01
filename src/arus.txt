@@ -1,0 +1,215 @@
+#include <Arduino.h>
+#include <Wire.h>
+#include <SPIFFS.h>
+#include <SD.h>
+#include <Update.h>
+
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <ACS712.h>
+#include <LiquidCrystal_I2C.h>
+
+ACS712 ACSGenerator(33, 3.3, 4095, 65.7); // 65.7 adalah hasil kalibrasi resistor
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+void setup()
+{
+    Serial.begin(115200);
+    // inisialisasi dan kalibrasi nilai sensor arus
+    ACSGenerator.autoMidPoint();
+    Serial.println(ACSGenerator.getMidPoint());
+
+    // Initialize the LCD connected
+    lcd.init();
+    // Turn on the backlight on LCD.
+    lcd.backlight();
+}
+
+void loop()
+{
+    // perintah mendaptatkan nilai arus generator ke baterai
+    int nilaiArusGenerator = ACSGenerator.mA_DC();
+    if (nilaiArusGenerator < 0)
+        nilaiArusGenerator = nilaiArusGenerator * -1;
+
+    Serial.print("arus: ");
+    Serial.println(nilaiArusGenerator);
+    lcd.setCursor(0,0);
+    lcd.print("arus: ");
+    lcd.print(nilaiArusGenerator);
+    lcd.print("   ");
+
+    delay(300);
+
+}
+
+// #include <Arduino.h>
+// #include <Wire.h>
+// #include <SPIFFS.h>
+// #include <SD.h>
+// #include <Update.h>
+// #include <ACS712.h>
+// #include <LiquidCrystal_I2C.h>
+
+// #include <WiFi.h>
+// #include <WiFiClientSecure.h>
+
+// // // include firebase dan wifi
+// #include <Firebase_ESP_Client.h>
+// #include <addons/TokenHelper.h>
+// #include <addons/RTDBHelper.h>
+// #define WIFI_SSID "KONTRAKAN UYE" // ini adalah nama wifi
+// #define WIFI_PASSWORD "KUSANG123" // dan ini adalah passwordnya. kosongkan bagian ini kalau tidak pakai password
+// #define API_KEY "AIzaSyBsVj4YXqGT7PexdZ0QD1wK2UUjRtPk878"
+// #define DATABASE_URL "bangfaisal-1-default-rtdb.asia-southeast1.firebasedatabase.app" //<databaseName>.firebaseio.com or <databaseName>.<region>.firebasedatabase.app
+// #define USER_EMAIL "ahmadyusufmaulana0@gmail.com"
+// #define USER_PASSWORD "yusuf1112"
+
+// // Define Firebase Data object
+// FirebaseData fbdo;
+// FirebaseAuth auth;
+// FirebaseConfig config;
+// unsigned long sendDataPrevMillis = 0;
+
+// // Floats for ADC voltage & Input voltage
+// float adc_voltage_generator = 0.0;
+// float in_voltage_generator = 0.0;
+// float adc_voltage_baterai = 0.0;
+// float in_voltage_baterai = 0.0;
+
+// // Floats for resistor values in divider (in ohms)
+// float R1 = 30000.0;
+// float R2 = 7500.0;
+
+// // Integer for ADC value
+// int adc_value_generator = 0;
+// int adc_value_baterai = 0;
+
+// // boolean untuk relay upload ke firebase
+// bool keadaanRelay1 = false;
+// bool keadaanRelay2 = false;
+
+// // ini adalah variabel nilai daya
+// float daya = 0;
+
+// // variabel counter dengan menggunakan ir sensor
+// int keadaanSensor = 0;
+// int keadaanTekan = 0;
+// int jumlahTonjolan = 0;  // jumlah polisi tidur tertekan kebawah
+// int jumlahKendaraan = 0; // adalah jumlah kendaraan dengan membagi jumlah jonjolan dengan dua
+
+// LiquidCrystal_I2C lcd(0x27, 16, 2);
+// ACS712 ACSGenerator(33, 3.3, 4095, 65.7); // 65.7 adalah hasil kalibrasi resistor
+// ACS712 ACSBaterai(32, 3.3, 4095, 185);
+
+// void setup()
+// {
+//     Serial.begin(115200);
+//     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+//     Serial.print("Connecting to Wi-Fi");
+//     lcd.setCursor(0, 0);
+//     lcd.print("connecting     ");
+//     lcd.setCursor(0, 1);
+//     lcd.print("               ");
+//     delay(3000);
+//     while (WiFi.status() != WL_CONNECTED)
+//     {
+//         Serial.print(".");
+//         lcd.setCursor(0, 1);
+//         lcd.print(".");
+//         delay(3000);
+//     }
+//     Serial.println();
+//     Serial.print("Connected with IP: ");
+//     Serial.println(WiFi.localIP());
+//     Serial.println();
+//     lcd.setCursor(0, 0);
+//     lcd.print("connected!?    ");
+//     lcd.setCursor(0, 1);
+//     lcd.print("IP:");
+//     lcd.print(WiFi.localIP());
+//     delay(1000);
+
+//     config.api_key = API_KEY;
+//     auth.user.email = USER_EMAIL;
+//     auth.user.password = USER_PASSWORD;
+//     config.database_url = DATABASE_URL;
+//     config.token_status_callback = tokenStatusCallback; // see addons/TokenHelper.h
+//     Firebase.begin(&config, &auth);
+//     Firebase.reconnectWiFi(true);
+//     Firebase.setDoubleDigits(5);
+
+//     // setting inisialisasi sensor IR
+//     pinMode(18, INPUT);
+//     // inisialisasi relay
+//     pinMode(34, INPUT);//generator
+//     pinMode(35, INPUT);//baterai
+
+//     // inisialisasi dan kalibrasi nilai sensor arus
+//     ACSGenerator.autoMidPoint();
+//     Serial.println(ACSGenerator.getMidPoint());
+//     ACSBaterai.autoMidPoint();
+//     Serial.println(ACSBaterai.getMidPoint());
+//     // Initialize the LCD connected
+//     lcd.init();
+//     // Turn on the backlight on LCD.
+//     lcd.backlight();
+// }
+ 
+// void loop()
+// {
+//     // perintah mendaptatkan nilai arus generator ke baterai
+//     int nilaiArusGenerator = ACSGenerator.mA_DC();
+//     if (nilaiArusGenerator < 0)
+//         nilaiArusGenerator = nilaiArusGenerator * -1;
+
+//     // perintah mendaptatkan nilai arus baterai ke beban
+//     int nilaiArusBaterai = ACSBaterai.mA_DC();
+//     if (nilaiArusBaterai < 0)
+//         nilaiArusBaterai = nilaiArusBaterai * -1;
+
+//         // Read the Analog Input
+//     adc_value_generator = analogRead(34);//generator
+//     adc_value_baterai = analogRead(35);//baterai
+//     // Determine voltage at ADC input
+//     adc_voltage_generator = (adc_value_generator * 3.3) / 4096.0;
+//     adc_voltage_baterai = (adc_value_baterai * 3.3) / 4096.0;
+//     // Calculate voltage at divider input
+//     in_voltage_generator = adc_voltage_generator / (R2 / (R1 + R2)) * 1.28;
+//     in_voltage_baterai = adc_voltage_baterai / (R2 / (R1 + R2)) * 1.28;
+
+//     // Print results to Serial Monitor to 2 decimal places
+//     // Serial.print("V gen: ");
+//     // Serial.print(in_voltage_generator, 2);
+//     // Serial.print("V bat: ");
+//     // Serial.println(in_voltage_baterai, 2);
+//     // Here cursor is placed on second line
+//     // lcd.setCursor(0, 0);
+//     // lcd.print(in_voltage_generator, 2);
+//     // lcd.print(" V gen");
+//     // lcd.setCursor(0, 1);
+//     // lcd.print(in_voltage_baterai, 2);
+//     // lcd.print(" V bat");
+//     // Serial.println(" ");
+
+//     Serial.print("arus: ");
+//     Serial.println(nilaiArusGenerator);
+//     lcd.setCursor(0, 0);
+//     lcd.print(nilaiArusGenerator);
+//     lcd.print(" Amp gen     ");
+//     delay(300);
+
+//     // ini kode untuk upload kode ke firebase
+//     if (Firebase.ready() && (millis() - sendDataPrevMillis > 4000 || sendDataPrevMillis == 0))
+//     {
+//         sendDataPrevMillis = millis();
+//         // Firebase.RTDB.setFloat(&fbdo, "/DayaGenerator", daya);
+//         // Firebase.RTDB.setFloat(&fbdo, "/VGenerator", vIN1);
+//         // Firebase.RTDB.setFloat(&fbdo, "/VBaterai", vIN2);
+//         Firebase.RTDB.setFloat(&fbdo, "/Agenerator", nilaiArusBaterai);
+//         Firebase.RTDB.setFloat(&fbdo, "/ABaterai", nilaiArusGenerator);
+//         // Firebase.RTDB.setBool(&fbdo, "/RelayGenerator", keadaanRelay1);
+//         // Firebase.RTDB.setBool(&fbdo, "/RelayBaterai", keadaanRelay2);
+//         // Firebase.RTDB.setInt(&fbdo, "/JumlahKendaraan", jumlahKendaraan);
+//     }
+// }
